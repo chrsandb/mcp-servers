@@ -1,0 +1,189 @@
+# Progress Log
+
+## 2026-04-20
+- Cloned the repository into the current workspace.
+- Completed repo-wide architecture review.
+- Completed target package review for:
+  - `packages/management`
+  - `packages/threat-prevention`
+  - `packages/https-inspection`
+- Verified shared execution/auth/session abstractions already support generic write calls.
+- Confirmed there is little to no existing automated test footprint in the repo.
+- Confirmed from official Check Point documentation that key mutation primitives exist for management and threat prevention, and confirmed `set-https-rule`.
+- Prepared the planning workspace and repo-local agent guidance.
+
+Current status:
+- Research and planning are ready.
+- Awaiting user direction on final v1 write scope before implementation.
+
+## 2026-04-20
+- Started implementation using the conservative v1 scope from `recommended-scope.md`.
+- Added `planning/write-support/implementation.md` as the durable implementation record and linked it from the workspace README.
+- Added shared mutation-formatting helpers in `packages/infra/src/mutation-utils.ts`.
+- Added package-local write tool registration modules for:
+  - `packages/management`
+  - `packages/threat-prevention`
+  - `packages/https-inspection`
+- Wired new write tools into each target package entrypoint.
+- Implemented explicit draft-session controls:
+  - `publish_session`
+  - `discard_session`
+- Implemented management object write tools for:
+  - hosts
+  - networks
+  - address ranges
+  - DNS domains
+  - groups
+  - TCP/UDP/ICMP/ICMP6 services
+  - tags
+  - security zones
+- Implemented threat prevention write tools for:
+  - threat profiles
+  - exception groups
+- Implemented HTTPS inspection write support for:
+  - `set_https_rule`
+- Added `raw_payload` passthrough support to the new write tools where the Check Point API field surface is broader than the locally hardcoded convenience fields.
+
+Current validation status:
+- Static code review completed for the new modules and wiring.
+- Installed workspace dependencies with `npm ci`.
+- Confirmed local `tsc` and `jest` binaries are now present under `node_modules/.bin`.
+- Built `packages/mcp-utils`.
+- Built `packages/infra` after `mcp-utils` was available.
+- Built `packages/management`.
+- Built `packages/threat-prevention`.
+- Built `packages/https-inspection`.
+- Resolved a TypeScript deep-instantiation blocker in `packages/management` by routing prompt registration through an `any`-typed alias without changing runtime behavior.
+- Added a minimal Jest config in `packages/infra`.
+- Added unit tests for `packages/infra/src/mutation-utils.ts`.
+- Ran `packages/infra` tests successfully:
+  - 1 suite passed
+  - 3 tests passed
+- Added package-local Jest configs for:
+  - `packages/management`
+  - `packages/threat-prevention`
+  - `packages/https-inspection`
+- Added mocked integration-style tests for the new write tools in:
+  - `packages/management/src/write-tools.test.ts`
+  - `packages/threat-prevention/src/write-tools.test.ts`
+  - `packages/https-inspection/src/write-tools.test.ts`
+- Updated touched package TypeScript configs to exclude `**/*.test.ts` and `**/*.spec.ts` from production builds.
+- Ran mocked integration tests successfully:
+  - management: 1 suite passed, 4 tests passed
+  - threat-prevention: 1 suite passed, 3 tests passed
+  - https-inspection: 1 suite passed, 2 tests passed
+- Re-ran touched-package builds after the test-related changes and confirmed they still pass.
+- Performed a live sanity check against the temporary management endpoint provided by the user:
+  - hostname: `demop2tfxlsg5v.mgmt.cloud`
+  - login succeeded
+  - server TLS certificate is currently expired, so the live check required insecure TLS bypass for curl-based validation
+- Live management draft-flow validation succeeded:
+  - created a temporary host object in draft
+  - read the same host back successfully in the same session
+  - discarded the session
+  - confirmed the temporary host no longer exists after discard
+- Live OT-style network draft validation also succeeded:
+  - created a temporary network object intended as an OT example draft
+  - read the same network back successfully in the same session
+  - discarded the session
+  - confirmed the temporary network no longer exists after discard
+- Confirmed the current MCP write implementation still does not support:
+  - policy package creation
+  - access policy creation
+  - access rule CRUD
+  - install policy
+- Live threat-profile create validation was environment-blocked:
+  - `add-threat-profile` returned an async task
+  - the task failed with: `Profile operation is currently running, cannot run another operation.`
+- Live HTTPS rule update validation was environment-blocked:
+  - the demo environment did not expose an obvious HTTPS rule target in the probed rulebase response
+- User then requested expansion toward full write access, including the previously missing package/policy/rule gaps.
+- Confirmed from Check Point API references that broader mutation endpoints exist for package, rule, and policy operations.
+- Updated planning scope before broadening implementation beyond the original conservative slice.
+- Expanded the management write surface with:
+  - delete counterparts for existing object tools
+  - `add_package`
+  - `set_package`
+  - `delete_package`
+  - `add_access_layer`
+  - `set_access_layer`
+  - `delete_access_layer`
+  - `add_access_rule`
+  - `set_access_rule`
+  - `delete_access_rule`
+  - `add_nat_rule`
+  - `set_nat_rule`
+  - `delete_nat_rule`
+  - `install_policy`
+  - `management__write_command`
+- Expanded the threat-prevention write surface with:
+  - delete tools for profiles and exception groups
+  - `add_threat_exception`
+  - `set_threat_exception`
+  - `delete_threat_exception`
+  - `threat-prevention__write_command`
+- Expanded the HTTPS inspection write surface with:
+  - `add_https_rule`
+  - `delete_https_rule`
+  - `https-inspection__write_command`
+- Extended mocked integration tests to cover parts of the new broader write surface.
+- Re-ran touched-package builds successfully after broadening the write tools.
+- Performed a live draft-only policy-package sanity check on the temporary management:
+  - created a temporary policy package
+  - read it back successfully in-session
+  - discarded the session
+  - confirmed the temporary package no longer exists after discard
+- Revalidated `planning/write-support/implementation.md` against the current source and test suite.
+- Corrected stale scope text in `implementation.md` that still described the earlier conservative object-only phase.
+- Removed duplicated stale HTTPS documentation from `implementation.md` and refreshed the current verification counts.
+- Performed a full live MCP-backed write-path validation against the temporary management using the implemented management write tools directly.
+- Successfully created and published:
+  - a temporary OT example network object
+  - a temporary policy package
+  - a temporary access rule in the package's generated access layer
+- Confirmed after publish from a fresh read session that the new package, network, and rule are visible on the server.
+- Published validation example names:
+  - `codex-ot-demo-20260420d-network`
+  - `codex-ot-demo-20260420d-package`
+  - access layer: `codex-ot-demo-20260420d-package Network`
+- Added repo guidance that implementation and planning changes should be staged/tracked by Git before handing work back, while commits remain explicit user actions.
+- Reviewed `FIXES.md` and implemented the agreed fix pass for:
+  - `S1`: write-command path traversal hardening
+  - `S2`: protected target-routing field conflict checks for `raw_payload`
+  - `B1`: `set_package` no-op update validation
+  - `B2`: `set_threat_exception` no-op update validation
+  - `B3`: empty arrays preserved by shared API payload sanitization
+  - `B4`: `add_https_rule` requires `layer`
+  - `B5`: clearer `add_address_range` validation message
+  - `P1`: focused shared helper extraction for write-command and raw-payload safety
+  - `P3`: optional `success` flag in formatted mutation output
+  - `P4`: install-policy guidance for non-management write-command tools
+- Deferred full IP/subnet format validation from `P2` as a separate validation-hardening pass.
+- Re-ran focused tests successfully:
+  - infra: 1 suite passed, 8 tests passed
+  - management: 1 suite passed, 10 tests passed
+  - threat-prevention: 1 suite passed, 8 tests passed
+  - https-inspection: 1 suite passed, 7 tests passed
+- Re-ran touched-package builds successfully for:
+  - `packages/infra`
+  - `packages/management`
+  - `packages/threat-prevention`
+  - `packages/https-inspection`
+- Fixed a management write-command UX edge case where padded or uppercased `INSTALL-POLICY` routed correctly but produced generic publish next-step guidance.
+- Added a regression test confirming normalized `install-policy` commands get the install-specific next-step note.
+- Re-ran focused management validation successfully:
+  - management: 1 suite passed, 11 tests passed
+  - `packages/management` `build:tsc` passed
+- Added a startup write-access gate for the three write-capable MCP servers:
+  - `ENABLE_WRITE` is declared in each target package `server-config.json` with default `false`
+  - write tools are not registered unless the config declares `ENABLE_WRITE` and startup config explicitly enables it
+  - `ENABLE_WRITE=true` and `--enable-write` are accepted enablement paths
+- Updated package READMEs with write-access guidance and added config tests for the new option.
+- Re-ran focused validation successfully after the write gate:
+  - infra: 1 suite passed, 10 tests passed
+  - management: 2 suites passed, 12 tests passed
+  - threat-prevention: 2 suites passed, 9 tests passed
+  - https-inspection: 2 suites passed, 8 tests passed
+  - `packages/infra` build passed
+  - target package `build:tsc` passed for management, threat-prevention, and HTTPS inspection
+- Added a director-level publish description for the final write-support release outcome.

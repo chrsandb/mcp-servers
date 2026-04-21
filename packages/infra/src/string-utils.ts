@@ -17,9 +17,8 @@ export function sanitizeData(kwargs: Record<string, any>) {
     const data: Record<string, any> = {};
 
     for (const [key, value] of Object.entries(kwargs)) {
-        // Skip null, undefined, empty strings, and empty arrays
-        if (value === null || value === undefined || value === "" ||
-            (Array.isArray(value) && value.length === 0)) {
+        // Skip null, undefined, and empty strings. Preserve empty arrays so callers can clear collection fields.
+        if (value === null || value === undefined || value === "") {
             continue;
         }
 

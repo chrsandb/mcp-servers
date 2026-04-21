@@ -58,6 +58,14 @@
       "default": "443",
       "type": "string",
       "help": "API port of your on-premises management server. Default is 443. Leave empty for Smart-1 Cloud"
+    },
+    {
+      "flag": "--enable-write",
+      "description": "Enable write-capable MCP tools",
+      "env": "ENABLE_WRITE",
+      "default": "false",
+      "type": "boolean",
+      "help": "Write-capable tools are disabled by default. Set ENABLE_WRITE=true before server startup to expose tools that create, update, delete, publish, or install policy changes."
     }
   ]
 }

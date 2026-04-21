@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 import { z } from 'zod';
-import { Settings, APIManagerForAPIKey, formatWithPaginationHint } from '@chkp/quantum-infra';
+import {
+  Settings,
+  APIManagerForAPIKey,
+  formatWithPaginationHint,
+  isWriteEnabled,
+  loadWriteEnableConfig,
+} from '@chkp/quantum-infra';
 import {
   launchMCPServer,
   createServerModule,
@@ -10,6 +16,9 @@ import {
 } from '@chkp/mcp-utils';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { registerThreatPreventionWriteTools } from './write-tools.js';
+
+const serverConfigPath = join(dirname(fileURLToPath(import.meta.url)), 'server-config.json');
 
 const { server, pkg } = createMcpServer(import.meta.url, {
   description: 'MCP server to interact with Threat Prevention objects on Check Point Gateways.'
@@ -71,6 +80,10 @@ server.tool(
     }
   }
 );
+
+if (isWriteEnabled(loadWriteEnableConfig(serverConfigPath))) {
+  registerThreatPreventionWriteTools(server, serverModule);
+}
 
 
 // Tool: show_threat_protections
@@ -760,10 +773,7 @@ server.tool(
 export { server };
 
 const main = async () => {
-  await launchMCPServer(
-    join(dirname(fileURLToPath(import.meta.url)), 'server-config.json'),
-    serverModule
-  );
+  await launchMCPServer(serverConfigPath, serverModule);
 };
 
 main().catch((error) => {

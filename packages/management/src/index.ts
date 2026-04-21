@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 
 import { z } from 'zod';
-import { Settings, APIManagerForAPIKey, formatWithPaginationHint } from '@chkp/quantum-infra';
+import {
+  Settings,
+  APIManagerForAPIKey,
+  formatWithPaginationHint,
+  isWriteEnabled,
+  loadWriteEnableConfig,
+} from '@chkp/quantum-infra';
 import {
   launchMCPServer,
   createServerModule,
@@ -17,10 +23,14 @@ import {
   formatAsModelFriendly,
   ZeroHitsUtil
 } from './rulebase-parser/index.js';
+import { registerManagementWriteTools } from './write-tools.js';
+
+const serverConfigPath = join(dirname(fileURLToPath(import.meta.url)), 'server-config.json');
 
 const { server, pkg } = createMcpServer(import.meta.url, {
   description: "MCP server to run commands on a Check Point Management. Use this to view policies and objects for Access, NAT and VPN."
 });
+const promptServer: any = server;
 
 // Create a multi-user server module
 const serverModule = createServerModule(
@@ -45,7 +55,7 @@ const TOPOLOGY_VISUALIZATION = `Create a visual topology diagram of the Check Po
 const SOURCE_TO_DESTINATION = `The user is asking to know the possible paths from {SOURCE} to {DESTINATION}. To create a source-to-destination path, You need to gather the following information:\n1. The source and destination objects (hosts, networks, etc.)\n2. The relevant access layer and rules that apply to the traffic between these objects\n3. Any NAT rules that may affect the traffic flow\n4. The gateways involved in the path\n\nI can use the show_access_rulebase, show_nat_rulebase, and show_gateways_and_servers functions to gather this information.\nOnce You have all the necessary details, You can construct the path. You will explain my decision with objects and rules references and also create a visualization of the path if needed.`;
 
 // --- PROMPTS ---
-server.prompt(
+promptServer.prompt(
   'show_gateways_prompt',
   {},
   () => ({
@@ -61,7 +71,7 @@ server.prompt(
   })
 );
 
-server.prompt(
+promptServer.prompt(
   'show_policies_prompt',
   {},
   () => ({
@@ -77,7 +87,7 @@ server.prompt(
   })
 );
 
-server.prompt(
+promptServer.prompt(
   'show_rule_prompt',
   {
     rule_name: z.string().optional(),
@@ -102,7 +112,7 @@ server.prompt(
 );
 
 
-server.prompt(
+promptServer.prompt(
   'source_to_destination_prompt',
   {
     source: z.string().optional(),
@@ -173,6 +183,10 @@ server.tool(
     }
   }
 );
+
+if (isWriteEnabled(loadWriteEnableConfig(serverConfigPath))) {
+  registerManagementWriteTools(server, serverModule);
+}
 
 server.tool(
   'show_access_rulebase',
@@ -2243,10 +2257,7 @@ server.tool(
 export { server };
 
 const main = async () => {
-  await launchMCPServer(
-    join(dirname(fileURLToPath(import.meta.url)), 'server-config.json'),
-    serverModule
-  );
+  await launchMCPServer(serverConfigPath, serverModule);
 };
 
 main().catch((error) => {

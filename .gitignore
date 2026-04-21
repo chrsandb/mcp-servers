@@ -48,3 +48,6 @@ Thumbs.db
 
 # Nx cache and workspace data
 .nx/
+
+# Local review artifacts
+FIXES.md
