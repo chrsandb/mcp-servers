@@ -17,6 +17,10 @@ While the Logs MCP work well on it's own, and will enable to read logs and deriv
 - Query and visualize connection logs
 - View Audit and monitoring logs 
 
+## Management API Version
+
+This server supports **Management API v2.1 (R82.10+)**. It is generally compatible with earlier versions; some parameters may not be available on older management servers.
+
 ## Demo
 
 [![Watch the demo](https://img.youtube.com/vi/-DuLzDJK9Yo/0.jpg)](https://www.youtube.com/watch?v=-DuLzDJK9Yo)
@@ -227,6 +231,40 @@ Enter Cursor settings and click on "MCP Servers" in the left menu.
 You should see the option to add a new MCP Server.
 Add the configuration as Claude Desktop App.
   
+---
+
+## HTTP Transport
+
+By default, this server uses **stdio** transport, which is the standard mode for MCP clients like Claude Desktop and Cursor. For hosted or multi-user deployments, an **HTTP transport** (MCP Streamable HTTP) is also available.
+
+> **Security notice before you continue:** The HTTP server has no built-in authentication and no TLS. Any client that can reach the port can establish a session, and credentials travel in cleartext. Only use HTTP transport behind an authenticated reverse proxy (nginx, Caddy, a cloud load balancer) that terminates TLS and enforces authentication. If you are running the server on the same machine as your MCP client, use the default stdio transport — it has none of these concerns.
+
+### Starting the server in HTTP mode
+
+```bash
+MCP_TRANSPORT_TYPE=http MCP_TRANSPORT_PORT=3000 npx @chkp/management-logs-mcp
+# or
+npx @chkp/management-logs-mcp --transport http --transport-port 3000
+```
+
+The server exposes:
+- `POST/GET/DELETE /mcp` — MCP protocol endpoint
+- `GET /health` — server status (active session count, version)
+
+### Connecting an MCP client
+
+Point your MCP client at `http://<host>:3000/mcp`. Example for Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "management-logs": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
 ---
 
 ## Development
