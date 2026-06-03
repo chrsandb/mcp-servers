@@ -17,12 +17,17 @@ jest.mock('@chkp/quantum-infra', () => ({
       }
     }
   },
-  assertWriteCommand: (command: string, options?: { allowInstallPolicy?: boolean }) => {
+  assertWriteCommand: (command: string, options?: { allowInstallPolicy?: boolean; allowDelete?: boolean }) => {
     const normalized = command.trim().toLowerCase();
     if (!/^[a-z][a-z0-9-]*$/.test(normalized)) {
       throw new Error('Command must contain only lowercase letters, digits, and hyphens');
     }
-    if (['publish', 'discard'].includes(normalized) || normalized.startsWith('add-') || normalized.startsWith('set-') || normalized.startsWith('delete-')) {
+    if (
+      ['publish', 'discard'].includes(normalized) ||
+      normalized.startsWith('add-') ||
+      normalized.startsWith('set-') ||
+      (options?.allowDelete !== false && normalized.startsWith('delete-'))
+    ) {
       return normalized;
     }
     if (options?.allowInstallPolicy && normalized === 'install-policy') {
@@ -77,6 +82,7 @@ describe('management write tools', () => {
     expect(tools.discard_session).toBeDefined();
     expect(tools.add_host).toBeDefined();
     expect(tools.set_network).toBeDefined();
+    expect(tools.delete_package).toBeUndefined();
   });
 
   test('add_host maps payload and domain to add-host', async () => {
@@ -144,7 +150,7 @@ describe('management write tools', () => {
     const callApi = jest.fn().mockResolvedValue({ message: 'OK' });
     (SessionContext.getAPIManager as jest.Mock).mockReturnValue({ callApi });
 
-    registerManagementWriteTools(server as any, {});
+    registerManagementWriteTools(server as any, {}, { destroyEnabled: true });
 
     await tools.delete_package.handler({ name: 'OT Package' }, {});
 
@@ -167,6 +173,21 @@ describe('management write tools', () => {
         {
           command: 'show-host',
           payload: { name: 'x' },
+        },
+        {}
+      )
+    ).rejects.toThrow('Only explicit write-oriented commands are allowed.');
+  });
+
+  test('management__write_command rejects delete commands without destroy access', async () => {
+    const { server, tools } = createMockServer();
+    registerManagementWriteTools(server as any, {});
+
+    await expect(
+      tools['management__write_command'].handler(
+        {
+          command: 'delete-host',
+          payload: { name: 'host-1' },
         },
         {}
       )
@@ -204,6 +225,24 @@ describe('management write tools', () => {
     );
 
     expect(callApi).toHaveBeenCalledWith('POST', 'set-host', { name: 'host-1', comments: 'updated' }, undefined);
+  });
+
+  test('management__write_command allows delete commands with destroy access', async () => {
+    const { server, tools } = createMockServer();
+    const callApi = jest.fn().mockResolvedValue({ message: 'OK' });
+    (SessionContext.getAPIManager as jest.Mock).mockReturnValue({ callApi });
+
+    registerManagementWriteTools(server as any, {}, { destroyEnabled: true });
+
+    await tools['management__write_command'].handler(
+      {
+        command: ' DELETE-HOST ',
+        payload: { name: 'host-1' },
+      },
+      {}
+    );
+
+    expect(callApi).toHaveBeenCalledWith('POST', 'delete-host', { name: 'host-1' }, undefined);
   });
 
   test('management__write_command uses normalized install-policy for next steps', async () => {

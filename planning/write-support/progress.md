@@ -187,3 +187,13 @@ Current validation status:
   - `packages/infra` build passed
   - target package `build:tsc` passed for management, threat-prevention, and HTTPS inspection
 - Added a director-level publish description for the final write-support release outcome.
+
+## 2026-06-03
+- Created follow-on branch `feature/destroy-support` on top of `feature/write-support`.
+- Split persistent delete support from ordinary write support across:
+  - shared capability gating in `packages/infra`
+  - package startup config in management, threat-prevention, and HTTPS inspection
+  - package-local tool registration and write-command validation
+- Kept `discard_session` under ordinary write access and kept `install_policy` under ordinary management write access.
+- Added `ENABLE_DESTROY` config coverage and mocked tests proving delete tools stay absent unless destroy access is enabled.
+- Updated package READMEs and planning docs to describe the two-gate safety model.

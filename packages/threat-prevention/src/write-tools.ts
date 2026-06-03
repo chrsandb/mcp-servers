@@ -123,7 +123,12 @@ function registerSessionTools(server: CPMcpServer, serverModule: any) {
   );
 }
 
-export function registerThreatPreventionWriteTools(server: CPMcpServer, serverModule: any) {
+export function registerThreatPreventionWriteTools(
+  server: CPMcpServer,
+  serverModule: any,
+  options?: { destroyEnabled?: boolean }
+) {
+  const destroyEnabled = options?.destroyEnabled ?? false;
   registerSessionTools(server, serverModule);
 
   server.tool(
@@ -306,46 +311,48 @@ export function registerThreatPreventionWriteTools(server: CPMcpServer, serverMo
     }
   );
 
-  for (const [toolPrefix, uriBase] of [
-    ['threat_profile', 'threat-profile'],
-    ['exception_group', 'exception-group'],
-  ] as const) {
-    server.tool(
-      `delete_${toolPrefix}`,
-      `Delete a ${uriBase} in the current management session draft.`,
-      {
-        name: nameSchema.optional(),
-        uid: uidSchema.optional(),
-        ignore_warnings: z.boolean().optional(),
-        ignore_errors: z.boolean().optional(),
-        raw_payload: rawPayloadSchema,
-        domain: domainSchema,
-      },
-      async (args: Record<string, unknown>, extra: any) => {
-        const payload = {
-          ...getRequiredNameOrUid(args),
-          ...pickDefinedEntries({
-            'ignore-warnings': args.ignore_warnings,
-            'ignore-errors': args.ignore_errors,
-          }),
-          ...(args.raw_payload as Record<string, unknown> | undefined),
-        };
+  if (destroyEnabled) {
+    for (const [toolPrefix, uriBase] of [
+      ['threat_profile', 'threat-profile'],
+      ['exception_group', 'exception-group'],
+    ] as const) {
+      server.tool(
+        `delete_${toolPrefix}`,
+        `Delete a ${uriBase} in the current management session draft.`,
+        {
+          name: nameSchema.optional(),
+          uid: uidSchema.optional(),
+          ignore_warnings: z.boolean().optional(),
+          ignore_errors: z.boolean().optional(),
+          raw_payload: rawPayloadSchema,
+          domain: domainSchema,
+        },
+        async (args: Record<string, unknown>, extra: any) => {
+          const payload = {
+            ...getRequiredNameOrUid(args),
+            ...pickDefinedEntries({
+              'ignore-warnings': args.ignore_warnings,
+              'ignore-errors': args.ignore_errors,
+            }),
+            ...(args.raw_payload as Record<string, unknown> | undefined),
+          };
 
-        return runMutation(
-          serverModule,
-          extra,
-          `delete-${uriBase}`,
-          payload,
-          getDomain(args),
-          `delete_${toolPrefix}`,
-          {
-            type: uriBase,
-            name: args.name as string | undefined,
-            uid: args.uid as string | undefined,
-          }
-        );
-      }
-    );
+          return runMutation(
+            serverModule,
+            extra,
+            `delete-${uriBase}`,
+            payload,
+            getDomain(args),
+            `delete_${toolPrefix}`,
+            {
+              type: uriBase,
+              name: args.name as string | undefined,
+              uid: args.uid as string | undefined,
+            }
+          );
+        }
+      );
+    }
   }
 
   for (const [toolPrefix, uriBase] of [['threat_exception', 'threat-exception']] as const) {
@@ -437,54 +444,60 @@ export function registerThreatPreventionWriteTools(server: CPMcpServer, serverMo
       }
     );
 
-    server.tool(
-      `delete_${toolPrefix}`,
-      `Delete a ${uriBase} from the current management session draft.`,
-      {
-        name: nameSchema.optional(),
-        uid: uidSchema.optional(),
-        layer: z.string().trim().min(1).optional(),
-        rule_uid: uidSchema.optional(),
-        rule_number: z.union([z.string().trim().min(1), z.number().int().positive()]).optional(),
-        raw_payload: rawPayloadSchema,
-        domain: domainSchema,
-      },
-      async (args: Record<string, unknown>, extra: any) => {
-        if (!args.name && !args.uid && !args.rule_uid && args.rule_number === undefined) {
-          throw new Error('Provide name, uid, rule_uid, or rule_number.');
+    if (destroyEnabled) {
+      server.tool(
+        `delete_${toolPrefix}`,
+        `Delete a ${uriBase} from the current management session draft.`,
+        {
+          name: nameSchema.optional(),
+          uid: uidSchema.optional(),
+          layer: z.string().trim().min(1).optional(),
+          rule_uid: uidSchema.optional(),
+          rule_number: z.union([z.string().trim().min(1), z.number().int().positive()]).optional(),
+          raw_payload: rawPayloadSchema,
+          domain: domainSchema,
+        },
+        async (args: Record<string, unknown>, extra: any) => {
+          if (!args.name && !args.uid && !args.rule_uid && args.rule_number === undefined) {
+            throw new Error('Provide name, uid, rule_uid, or rule_number.');
+          }
+          const payload = {
+            ...pickDefinedEntries({
+              name: args.name,
+              uid: args.uid,
+              layer: args.layer,
+              'rule-uid': args.rule_uid,
+              'rule-number': args.rule_number,
+            }),
+            ...(args.raw_payload as Record<string, unknown> | undefined),
+          };
+          return runMutation(serverModule, extra, `delete-${uriBase}`, payload, getDomain(args), `delete_${toolPrefix}`, {
+            type: uriBase,
+            name: args.name as string | undefined,
+            uid: args.uid as string | undefined,
+            ruleUid: args.rule_uid as string | undefined,
+            layer: args.layer as string | undefined,
+            ruleNumber: args.rule_number as string | number | undefined,
+          });
         }
-        const payload = {
-          ...pickDefinedEntries({
-            name: args.name,
-            uid: args.uid,
-            layer: args.layer,
-            'rule-uid': args.rule_uid,
-            'rule-number': args.rule_number,
-          }),
-          ...(args.raw_payload as Record<string, unknown> | undefined),
-        };
-        return runMutation(serverModule, extra, `delete-${uriBase}`, payload, getDomain(args), `delete_${toolPrefix}`, {
-          type: uriBase,
-          name: args.name as string | undefined,
-          uid: args.uid as string | undefined,
-          ruleUid: args.rule_uid as string | undefined,
-          layer: args.layer as string | undefined,
-          ruleNumber: args.rule_number as string | number | undefined,
-        });
-      }
-    );
+      );
+    }
   }
 
   server.tool(
     'threat-prevention__write_command',
-    'Execute an explicit write-oriented threat-prevention API command such as add-*, set-*, delete-*, publish, or discard. Use the management install_policy tool for install-policy.',
+    destroyEnabled
+      ? 'Execute an explicit write-oriented threat-prevention API command such as add-*, set-*, delete-*, publish, or discard. Use the management install_policy tool for install-policy.'
+      : 'Execute an explicit write-oriented threat-prevention API command such as add-*, set-*, publish, or discard. Delete commands require destroy access. Use the management install_policy tool for install-policy.',
     {
       command: commandSchema,
       payload: z.record(z.unknown()).optional(),
       domain: domainSchema,
     },
     async (args: Record<string, unknown>, extra: any) => {
-      const command = assertWriteCommand(args.command as string);
+      const command = assertWriteCommand(args.command as string, {
+        allowDelete: destroyEnabled,
+      });
       const apiManager = SessionContext.getAPIManager(serverModule, extra);
       const response = await apiManager.callApi('POST', command, (args.payload as Record<string, unknown> | undefined) ?? {}, getDomain(args));
       return {

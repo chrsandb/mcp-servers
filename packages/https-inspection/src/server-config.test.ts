@@ -11,4 +11,15 @@ describe('https inspection server config', () => {
       type: 'boolean',
     });
   });
+
+  test('declares destroy access as disabled by default', () => {
+    const option = config.options.find((entry) => entry.env === 'ENABLE_DESTROY');
+
+    expect(option).toMatchObject({
+      flag: '--enable-destroy',
+      env: 'ENABLE_DESTROY',
+      default: 'false',
+      type: 'boolean',
+    });
+  });
 });

@@ -92,17 +92,18 @@ Set the following environment variables:
 
 ### Write Access
 
-Write-capable tools are disabled by default. To expose tools that create, update, delete, publish, or install policy changes, set `ENABLE_WRITE=true` before starting the MCP server.
+Write-capable tools are disabled by default. To expose tools that create, update, publish, discard, or install policy changes, set `ENABLE_WRITE=true` before starting the MCP server. Delete operations stay hidden unless `ENABLE_DESTROY=true` is also set.
 
 ```json
 "env": {
   "API_KEY": "YOUR_API_KEY",
   "S1C_URL": "YOUR_S1C_URL",
-  "ENABLE_WRITE": "true"
+  "ENABLE_WRITE": "true",
+  "ENABLE_DESTROY": "true"
 }
 ```
 
-Restart the MCP server after changing this value. Use credentials with permissions appropriate for write operations, and leave `ENABLE_WRITE` unset or set to `false` for read-only deployments.
+Restart the MCP server after changing these values. Use credentials with permissions appropriate for write operations, leave `ENABLE_WRITE` unset or set to `false` for read-only deployments, and leave `ENABLE_DESTROY` unset unless you intentionally need delete tools.
 
 ---
 

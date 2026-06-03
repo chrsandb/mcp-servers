@@ -18,6 +18,8 @@ Shared implementation tasks:
 - [x] Add shared raw-payload target-conflict helper
 - [x] Preserve empty arrays in shared API payload sanitization
 - [x] Add shared `ENABLE_WRITE` startup gate helper
+- [x] Add shared `ENABLE_DESTROY` startup gate helper
+- [x] Split delete-command validation from ordinary write-command validation
 
 Management tasks:
 - [x] Define exact object family list for v1
@@ -37,6 +39,7 @@ Management tasks:
 - [x] Add `set_package` no-op update validation
 - [x] Add raw-payload target-conflict coverage
 - [x] Gate write tool registration behind `ENABLE_WRITE`
+- [x] Gate management delete tools behind `ENABLE_DESTROY`
 
 Threat Prevention tasks:
 - [x] Confirm whether threat exceptions are in v1
@@ -53,6 +56,7 @@ Threat Prevention tasks:
 - [x] Add `set_threat_exception` no-op update validation
 - [x] Add raw-payload target-conflict coverage
 - [x] Gate write tool registration behind `ENABLE_WRITE`
+- [x] Gate threat-prevention delete tools behind `ENABLE_DESTROY`
 
 HTTPS Inspection tasks:
 - [x] Confirm whether update-only or create/delete are included
@@ -67,11 +71,13 @@ HTTPS Inspection tasks:
 - [x] Require `layer` for `add_https_rule`
 - [x] Add raw-payload target-conflict coverage
 - [x] Gate write tool registration behind `ENABLE_WRITE`
+- [x] Gate HTTPS delete tools behind `ENABLE_DESTROY`
 
 Validation tasks:
 - [x] Typecheck/build touched packages
 - [x] Run unit tests
 - [x] Run mocked integration tests
 - [x] Add config tests for disabled-by-default write access
+- [x] Add config and mocked tests for disabled-by-default destroy access
 - [x] Prepare optional live sanity-check checklist
 - [ ] Add full IP/subnet format validation if Check Point API-compatible forms are confirmed

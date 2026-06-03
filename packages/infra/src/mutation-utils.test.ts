@@ -3,6 +3,7 @@ import {
   assertWriteCommand,
   buildNextStepHints,
   formatMutationResult,
+  isDestroyEnabled,
   isWriteEnabled,
   pickDefinedEntries,
 } from './mutation-utils';
@@ -90,6 +91,7 @@ describe('mutation-utils', () => {
 
   test('assertWriteCommand normalizes safe write commands', () => {
     expect(assertWriteCommand(' SET-HOST ')).toBe('set-host');
+    expect(assertWriteCommand(' delete-host ')).toBe('delete-host');
     expect(assertWriteCommand('install-policy', { allowInstallPolicy: true })).toBe('install-policy');
   });
 
@@ -99,6 +101,9 @@ describe('mutation-utils', () => {
     );
     expect(() => assertWriteCommand('show-host')).toThrow('Only explicit write-oriented commands are allowed.');
     expect(() => assertWriteCommand('install-policy')).toThrow('Only explicit write-oriented commands are allowed.');
+    expect(() => assertWriteCommand('delete-host', { allowDelete: false })).toThrow(
+      'Only explicit write-oriented commands are allowed. Use add-*, set-*, publish, or discard.'
+    );
   });
 
   test('assertNoRawPayloadConflicts rejects protected raw payload overrides', () => {
@@ -161,6 +166,27 @@ describe('mutation-utils', () => {
     expect(isWriteEnabled(config, { ENABLE_WRITE: 'TRUE' }, ['node'])).toBe(true);
     expect(isWriteEnabled(config, { ENABLE_WRITE: ' true ' }, ['node'])).toBe(true);
     expect(isWriteEnabled(config, {}, ['node', 'server', '--enable-write'])).toBe(true);
+  });
+
+  test('isDestroyEnabled follows the same strict opt-in behavior', () => {
+    const config = {
+      options: [
+        {
+          flag: '--enable-destroy',
+          env: 'ENABLE_DESTROY',
+          default: 'false',
+          type: 'boolean',
+        },
+      ],
+    };
+
+    expect(isDestroyEnabled(undefined, { ENABLE_DESTROY: 'true' }, ['node'])).toBe(false);
+    expect(isDestroyEnabled({ options: [] }, { ENABLE_DESTROY: 'true' }, ['node'])).toBe(false);
+    expect(isDestroyEnabled(config, {}, ['node'])).toBe(false);
+    expect(isDestroyEnabled(config, { ENABLE_DESTROY: 'false' }, ['node'])).toBe(false);
+    expect(isDestroyEnabled(config, { ENABLE_DESTROY: 'true' }, ['node'])).toBe(true);
+    expect(isDestroyEnabled(config, { ENABLE_DESTROY: ' TRUE ' }, ['node'])).toBe(true);
+    expect(isDestroyEnabled(config, {}, ['node', 'server', '--enable-destroy'])).toBe(true);
   });
 });
 

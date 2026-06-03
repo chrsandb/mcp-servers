@@ -65,7 +65,15 @@
       "env": "ENABLE_WRITE",
       "default": "false",
       "type": "boolean",
-      "help": "Write-capable tools are disabled by default. Set ENABLE_WRITE=true before server startup to expose tools that create, update, delete, publish, or install policy changes."
+      "help": "Write-capable tools are disabled by default. Set ENABLE_WRITE=true before server startup to expose tools that create, update, publish, or discard changes. Delete operations require ENABLE_DESTROY=true separately."
+    },
+    {
+      "flag": "--enable-destroy",
+      "description": "Enable destructive MCP tools",
+      "env": "ENABLE_DESTROY",
+      "default": "false",
+      "type": "boolean",
+      "help": "Destroy-capable tools are disabled by default. Set ENABLE_DESTROY=true before server startup to expose delete operations. ENABLE_WRITE must also be enabled for write tool registration."
     }
   ]
 }

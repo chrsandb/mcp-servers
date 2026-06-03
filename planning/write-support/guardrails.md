@@ -4,7 +4,7 @@
 - Prefer non-destructive mutations first.
 - Keep write-capable tools disabled by default.
 - Only expose write-capable tools when the package `server-config.json` declares `ENABLE_WRITE` and startup config explicitly enables it.
-- Do not add delete tools unless explicitly approved.
+- Only expose delete-capable tools when the package `server-config.json` declares `ENABLE_DESTROY` and startup config explicitly enables it.
 - Do not auto-chain:
   - mutation -> publish
   - publish -> install
@@ -12,6 +12,7 @@
 - Surface next-step requirements explicitly instead.
 - For broader write access, keep destructive and policy-impacting actions explicit and individually named wherever practical.
 - If a generic write-command tool is added, constrain it to explicit mutation-oriented command names instead of arbitrary API execution.
+- Keep `delete-*` write-command paths disabled unless destroy access is explicitly enabled.
 
 ## UX
 - Use explicit, unambiguous tool names.
@@ -31,6 +32,7 @@
 - Defer high-impact operations until requested and justified.
 - Record scope changes in `decision-log.md`.
 - The user has now requested broader/full write access, so higher-impact operations are in scope as long as safety boundaries remain explicit.
+- Persistent delete operations now have a stricter gate than ordinary writes and should remain absent from tool discovery unless `ENABLE_DESTROY` is enabled.
 
 ## Process
 - Keep this planning workspace updated as work proceeds.

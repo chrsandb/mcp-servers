@@ -16,7 +16,12 @@ function getDomain(args: Record<string, unknown>): string | undefined {
   return typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
 }
 
-export function registerHttpsInspectionWriteTools(server: CPMcpServer, serverModule: any) {
+export function registerHttpsInspectionWriteTools(
+  server: CPMcpServer,
+  serverModule: any,
+  options?: { destroyEnabled?: boolean }
+) {
+  const destroyEnabled = options?.destroyEnabled ?? false;
   server.tool(
     'publish_session',
     'Publish the current HTTPS inspection management session.',
@@ -195,68 +200,74 @@ export function registerHttpsInspectionWriteTools(server: CPMcpServer, serverMod
     }
   );
 
-  server.tool(
-    'delete_https_rule',
-    'Delete an HTTPS inspection rule from the current management session draft.',
-    {
-      uid: z.string().trim().min(1).optional(),
-      rule_number: z.union([z.string().trim().min(1), z.number().int().positive()]).optional(),
-      layer: z.string().trim().min(1).optional(),
-      raw_payload: rawPayloadSchema,
-      domain: domainSchema,
-    },
-    async (args: Record<string, unknown>, extra: any) => {
-      if (!args.uid && args.rule_number === undefined) {
-        throw new Error('Provide uid or rule_number.');
+  if (destroyEnabled) {
+    server.tool(
+      'delete_https_rule',
+      'Delete an HTTPS inspection rule from the current management session draft.',
+      {
+        uid: z.string().trim().min(1).optional(),
+        rule_number: z.union([z.string().trim().min(1), z.number().int().positive()]).optional(),
+        layer: z.string().trim().min(1).optional(),
+        raw_payload: rawPayloadSchema,
+        domain: domainSchema,
+      },
+      async (args: Record<string, unknown>, extra: any) => {
+        if (!args.uid && args.rule_number === undefined) {
+          throw new Error('Provide uid or rule_number.');
+        }
+        if (!args.uid && !args.layer) {
+          throw new Error('Provide layer when addressing a rule by rule_number.');
+        }
+        assertNoRawPayloadConflicts(args, { uid: 'uid', layer: 'layer', rule_number: 'rule-number' });
+
+        const payload = {
+          ...pickDefinedEntries({
+            uid: args.uid,
+            layer: args.layer,
+            'rule-number': args.rule_number,
+          }),
+          ...(args.raw_payload as Record<string, unknown> | undefined),
+        };
+
+        const apiManager = SessionContext.getAPIManager(serverModule, extra);
+        const response = await apiManager.callApi('POST', 'delete-https-rule', payload, getDomain(args));
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: formatMutationResult({
+                action: 'delete_https_rule',
+                target: {
+                  type: 'https-rule',
+                  uid: args.uid as string | undefined,
+                  layer: args.layer as string | undefined,
+                  ruleNumber: args.rule_number as string | number | undefined,
+                },
+                response,
+                nextSteps: buildNextStepHints({ publish: true }),
+              }),
+            },
+          ],
+        };
       }
-      if (!args.uid && !args.layer) {
-        throw new Error('Provide layer when addressing a rule by rule_number.');
-      }
-      assertNoRawPayloadConflicts(args, { uid: 'uid', layer: 'layer', rule_number: 'rule-number' });
-
-      const payload = {
-        ...pickDefinedEntries({
-          uid: args.uid,
-          layer: args.layer,
-          'rule-number': args.rule_number,
-        }),
-        ...(args.raw_payload as Record<string, unknown> | undefined),
-      };
-
-      const apiManager = SessionContext.getAPIManager(serverModule, extra);
-      const response = await apiManager.callApi('POST', 'delete-https-rule', payload, getDomain(args));
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: formatMutationResult({
-              action: 'delete_https_rule',
-              target: {
-                type: 'https-rule',
-                uid: args.uid as string | undefined,
-                layer: args.layer as string | undefined,
-                ruleNumber: args.rule_number as string | number | undefined,
-              },
-              response,
-              nextSteps: buildNextStepHints({ publish: true }),
-            }),
-          },
-        ],
-      };
-    }
-  );
+    );
+  }
 
   server.tool(
     'https-inspection__write_command',
-    'Execute an explicit write-oriented HTTPS inspection API command such as add-*, set-*, delete-*, publish, or discard. Use the management install_policy tool for install-policy.',
+    destroyEnabled
+      ? 'Execute an explicit write-oriented HTTPS inspection API command such as add-*, set-*, delete-*, publish, or discard. Use the management install_policy tool for install-policy.'
+      : 'Execute an explicit write-oriented HTTPS inspection API command such as add-*, set-*, publish, or discard. Delete commands require destroy access. Use the management install_policy tool for install-policy.',
     {
       command: commandSchema,
       payload: z.record(z.unknown()).optional(),
       domain: domainSchema,
     },
     async (args: Record<string, unknown>, extra: any) => {
-      const command = assertWriteCommand(args.command as string);
+      const command = assertWriteCommand(args.command as string, {
+        allowDelete: destroyEnabled,
+      });
       const apiManager = SessionContext.getAPIManager(serverModule, extra);
       const response = await apiManager.callApi('POST', command, (args.payload as Record<string, unknown> | undefined) ?? {}, getDomain(args));
       return {

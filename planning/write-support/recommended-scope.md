@@ -106,3 +106,19 @@ Preserved boundaries:
 - no auto-install
 - destructive actions remain explicit
 - live validation should continue to prefer draft-only flows unless publish/install is explicitly requested
+
+## Destroy Follow-On Branch
+
+Date:
+- 2026-06-03 UTC
+
+Direction:
+- Keep non-destructive write support on the existing `ENABLE_WRITE` gate.
+- Split persistent delete tooling into a follow-on branch layered on top of write support.
+- Require a second explicit startup gate, `ENABLE_DESTROY`, before exposing:
+  - named `delete_*` MCP tools
+  - `delete-*` write-command escape hatch paths
+
+Boundaries:
+- `discard_session` stays under normal write access because it only affects the current unpublished draft.
+- `install_policy` stays under normal write access and is not reclassified as destroy behavior.

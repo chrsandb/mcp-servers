@@ -13,12 +13,13 @@ Keep it updated whenever any of the following change:
 ## Status
 
 Date:
-- 2026-04-21 UTC
+- 2026-06-03 UTC
 
 Current state:
 - The implementation is no longer limited to the original conservative v1 slice.
 - The current code supports broad write access across the three target packages, while still keeping publish and install as explicit caller-controlled steps.
-- Write-capable tools are now disabled by default and are only registered when the package `server-config.json` declares `ENABLE_WRITE` and startup config explicitly enables it with `ENABLE_WRITE=true` or `--enable-write`.
+- Write-capable tools are disabled by default and are only registered when the package `server-config.json` declares `ENABLE_WRITE` and startup config explicitly enables it with `ENABLE_WRITE=true` or `--enable-write`.
+- Persistent delete tools are now split behind a second default-off gate, `ENABLE_DESTROY`, so write-enabled deployments do not automatically expose destructive delete operations.
 - No auto-publish behavior was introduced.
 - No auto-install behavior was introduced.
 - Local dependencies are installed in this workspace with `npm ci`.
@@ -90,12 +91,16 @@ Functions:
 - `isWriteEnabled(config, env, argv)`
   - returns `false` when `ENABLE_WRITE` is missing from the JSON config
   - returns `true` only for strict `ENABLE_WRITE=true` values or the configured `--enable-write` flag
+- `isDestroyEnabled(config, env, argv)`
+  - returns `false` when `ENABLE_DESTROY` is missing from the JSON config
+  - returns `true` only for strict `ENABLE_DESTROY=true` values or the configured `--enable-destroy` flag
 - `pickDefinedEntries(input)`
   - removes keys with `undefined` values before sending payloads to Check Point APIs
 - `assertWriteCommand(command, options)`
   - normalizes explicit write-command escape hatch names
   - rejects unsafe command path characters and traversal-like input
   - allows `install-policy` only when the caller opts in
+  - allows `delete-*` only when the caller opts in
 - `assertNoRawPayloadConflicts(args, protectedKeys)`
   - rejects `raw_payload` overrides of protected target-routing fields such as `name`, `uid`, `layer`, and `rule-number`
 - `buildNextStepHints(options)`
@@ -184,10 +189,10 @@ Helpers in use:
 - accepts:
   - `add-*`
   - `set-*`
-  - `delete-*`
   - `publish`
   - `discard`
   - `install-policy`
+  - `delete-*` only when destroy access is enabled
 
 ### Session tools
 
@@ -200,6 +205,7 @@ Behavior:
 - optional `domain`
 - direct `publish` / `discard` API call
 - response returned through `formatMutationResult(...)`
+- `discard_session` remains part of ordinary write access and is not gated behind destroy access
 
 `publish_session` note:
 - explicitly reminds the caller that policy installation is still a separate step

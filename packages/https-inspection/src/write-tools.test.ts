@@ -17,12 +17,17 @@ jest.mock('@chkp/quantum-infra', () => ({
       }
     }
   },
-  assertWriteCommand: (command: string) => {
+  assertWriteCommand: (command: string, options?: { allowDelete?: boolean }) => {
     const normalized = command.trim().toLowerCase();
     if (!/^[a-z][a-z0-9-]*$/.test(normalized)) {
       throw new Error('Command must contain only lowercase letters, digits, and hyphens');
     }
-    if (['publish', 'discard'].includes(normalized) || normalized.startsWith('add-') || normalized.startsWith('set-') || normalized.startsWith('delete-')) {
+    if (
+      ['publish', 'discard'].includes(normalized) ||
+      normalized.startsWith('add-') ||
+      normalized.startsWith('set-') ||
+      (options?.allowDelete !== false && normalized.startsWith('delete-'))
+    ) {
       return normalized;
     }
     throw new Error('Only explicit write-oriented commands are allowed.');
@@ -61,6 +66,13 @@ function createMockServer() {
 describe('https inspection write tools', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  test('does not register delete tools without destroy access', () => {
+    const { server, tools } = createMockServer();
+    registerHttpsInspectionWriteTools(server as any, {});
+
+    expect(tools.delete_https_rule).toBeUndefined();
   });
 
   test('set_https_rule maps rule_number-based updates correctly', async () => {
@@ -114,7 +126,7 @@ describe('https inspection write tools', () => {
     const callApi = jest.fn().mockResolvedValue({ message: 'OK' });
     (SessionContext.getAPIManager as jest.Mock).mockReturnValue({ callApi });
 
-    registerHttpsInspectionWriteTools(server as any, {});
+    registerHttpsInspectionWriteTools(server as any, {}, { destroyEnabled: true });
 
     await tools.delete_https_rule.handler(
       {
@@ -161,6 +173,39 @@ describe('https inspection write tools', () => {
         {}
       )
     ).rejects.toThrow('Only explicit write-oriented commands are allowed.');
+  });
+
+  test('https-inspection__write_command rejects delete commands without destroy access', async () => {
+    const { server, tools } = createMockServer();
+    registerHttpsInspectionWriteTools(server as any, {});
+
+    await expect(
+      tools['https-inspection__write_command'].handler(
+        {
+          command: 'delete-https-rule',
+          payload: { uid: 'rule-1' },
+        },
+        {}
+      )
+    ).rejects.toThrow('Only explicit write-oriented commands are allowed.');
+  });
+
+  test('https-inspection__write_command allows delete commands with destroy access', async () => {
+    const { server, tools } = createMockServer();
+    const callApi = jest.fn().mockResolvedValue({ message: 'OK' });
+    (SessionContext.getAPIManager as jest.Mock).mockReturnValue({ callApi });
+
+    registerHttpsInspectionWriteTools(server as any, {}, { destroyEnabled: true });
+
+    await tools['https-inspection__write_command'].handler(
+      {
+        command: ' DELETE-HTTPS-RULE ',
+        payload: { uid: 'rule-1' },
+      },
+      {}
+    );
+
+    expect(callApi).toHaveBeenCalledWith('POST', 'delete-https-rule', { uid: 'rule-1' }, undefined);
   });
 
   test('add_https_rule requires layer when raw_payload does not provide it', async () => {

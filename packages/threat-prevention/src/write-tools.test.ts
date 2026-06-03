@@ -5,12 +5,17 @@ jest.mock('@chkp/mcp-utils', () => ({
 }));
 
 jest.mock('@chkp/quantum-infra', () => ({
-  assertWriteCommand: (command: string) => {
+  assertWriteCommand: (command: string, options?: { allowDelete?: boolean }) => {
     const normalized = command.trim().toLowerCase();
     if (!/^[a-z][a-z0-9-]*$/.test(normalized)) {
       throw new Error('Command must contain only lowercase letters, digits, and hyphens');
     }
-    if (['publish', 'discard'].includes(normalized) || normalized.startsWith('add-') || normalized.startsWith('set-') || normalized.startsWith('delete-')) {
+    if (
+      ['publish', 'discard'].includes(normalized) ||
+      normalized.startsWith('add-') ||
+      normalized.startsWith('set-') ||
+      (options?.allowDelete !== false && normalized.startsWith('delete-'))
+    ) {
       return normalized;
     }
     throw new Error('Only explicit write-oriented commands are allowed.');
@@ -111,7 +116,7 @@ describe('threat prevention write tools', () => {
     const callApi = jest.fn().mockResolvedValue({ message: 'OK' });
     (SessionContext.getAPIManager as jest.Mock).mockReturnValue({ callApi });
 
-    registerThreatPreventionWriteTools(server as any, {});
+    registerThreatPreventionWriteTools(server as any, {}, { destroyEnabled: true });
 
     await tools.delete_threat_profile.handler({ name: 'profile-1' }, {});
 
@@ -153,6 +158,39 @@ describe('threat prevention write tools', () => {
         {}
       )
     ).rejects.toThrow('Only explicit write-oriented commands are allowed.');
+  });
+
+  test('threat-prevention__write_command rejects delete commands without destroy access', async () => {
+    const { server, tools } = createMockServer();
+    registerThreatPreventionWriteTools(server as any, {});
+
+    await expect(
+      tools['threat-prevention__write_command'].handler(
+        {
+          command: 'delete-threat-profile',
+          payload: { name: 'profile-1' },
+        },
+        {}
+      )
+    ).rejects.toThrow('Only explicit write-oriented commands are allowed.');
+  });
+
+  test('threat-prevention__write_command allows delete commands with destroy access', async () => {
+    const { server, tools } = createMockServer();
+    const callApi = jest.fn().mockResolvedValue({ message: 'OK' });
+    (SessionContext.getAPIManager as jest.Mock).mockReturnValue({ callApi });
+
+    registerThreatPreventionWriteTools(server as any, {}, { destroyEnabled: true });
+
+    await tools['threat-prevention__write_command'].handler(
+      {
+        command: 'DELETE-THREAT-PROFILE',
+        payload: { name: 'profile-1' },
+      },
+      {}
+    );
+
+    expect(callApi).toHaveBeenCalledWith('POST', 'delete-threat-profile', { name: 'profile-1' }, undefined);
   });
 
   test('set_threat_exception rejects calls without update fields', async () => {

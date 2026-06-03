@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 
 export const ENABLE_WRITE_ENV_VAR = 'ENABLE_WRITE';
+export const ENABLE_DESTROY_ENV_VAR = 'ENABLE_DESTROY';
 
 export type WriteEnableOption = {
   flag?: string;
@@ -31,6 +32,7 @@ export type MutationResultOptions = {
 
 export type WriteCommandOptions = {
   allowInstallPolicy?: boolean;
+  allowDelete?: boolean;
 };
 
 export function pickDefinedEntries(input: Record<string, any>): Record<string, any> {
@@ -47,8 +49,11 @@ export function loadWriteEnableConfig(configPath: string): WriteEnableConfig | u
   }
 }
 
-function findEnableWriteOption(config?: WriteEnableConfig): WriteEnableOption | undefined {
-  return config?.options?.find((option) => option.env === ENABLE_WRITE_ENV_VAR);
+function findEnableOption(
+  config: WriteEnableConfig | undefined,
+  envVar: string
+): WriteEnableOption | undefined {
+  return config?.options?.find((option) => option.env === envVar);
 }
 
 function strictTrue(value: unknown): boolean {
@@ -69,12 +74,26 @@ export function isWriteEnabled(
   env: Record<string, string | undefined> = process.env,
   argv: string[] = process.argv
 ): boolean {
-  const option = findEnableWriteOption(config);
+  const option = findEnableOption(config, ENABLE_WRITE_ENV_VAR);
   if (!option) {
     return false;
   }
 
   const envName = option.env ?? ENABLE_WRITE_ENV_VAR;
+  return strictTrue(env[envName]) || argvHasFlag(option.flag, argv);
+}
+
+export function isDestroyEnabled(
+  config?: WriteEnableConfig,
+  env: Record<string, string | undefined> = process.env,
+  argv: string[] = process.argv
+): boolean {
+  const option = findEnableOption(config, ENABLE_DESTROY_ENV_VAR);
+  if (!option) {
+    return false;
+  }
+
+  const envName = option.env ?? ENABLE_DESTROY_ENV_VAR;
   return strictTrue(env[envName]) || argvHasFlag(option.flag, argv);
 }
 
@@ -92,15 +111,22 @@ export function assertWriteCommand(command: string, options?: WriteCommandOption
     allowedCommands.add('install-policy');
   }
 
-  const allowedPrefixes = ['add-', 'set-', 'delete-'];
+  const allowedPrefixes = ['add-', 'set-'];
+  if (options?.allowDelete !== false) {
+    allowedPrefixes.push('delete-');
+  }
 
   if (allowedCommands.has(normalized) || allowedPrefixes.some((prefix) => normalized.startsWith(prefix))) {
     return normalized;
   }
 
   const allowedText = options?.allowInstallPolicy
-    ? 'add-*, set-*, delete-*, publish, discard, or install-policy'
-    : 'add-*, set-*, delete-*, publish, or discard';
+    ? options?.allowDelete === false
+      ? 'add-*, set-*, publish, discard, or install-policy'
+      : 'add-*, set-*, delete-*, publish, discard, or install-policy'
+    : options?.allowDelete === false
+      ? 'add-*, set-*, publish, or discard'
+      : 'add-*, set-*, delete-*, publish, or discard';
   throw new Error(`Only explicit write-oriented commands are allowed. Use ${allowedText}.`);
 }
 

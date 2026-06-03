@@ -118,3 +118,13 @@ Why:
 - Write access should be disabled by default and absent from MCP tool discovery unless explicitly enabled.
 - Tying the gate to `server-config.json` means packages that do not declare `ENABLE_WRITE` remain read-only even if the environment variable is set globally.
 - The gate accepts only strict `true` env values, plus the configured `--enable-write` startup flag, to avoid accidental enablement from broad truthy strings.
+
+## 2026-06-03
+
+Decision:
+- Split persistent delete support from ordinary write support behind a second startup gate, `ENABLE_DESTROY`.
+
+Why:
+- `ENABLE_WRITE` had become too broad once it exposed persistent delete operations alongside ordinary draft mutations.
+- A second explicit gate keeps delete tools out of MCP discovery for default write-enabled deployments.
+- `discard_session` remains under ordinary write access because it only reverts the current unpublished draft.

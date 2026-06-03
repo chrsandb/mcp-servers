@@ -5,6 +5,7 @@ import {
   Settings,
   APIManagerForAPIKey,
   formatWithPaginationHint,
+  isDestroyEnabled,
   isWriteEnabled,
   loadWriteEnableConfig,
 } from '@chkp/quantum-infra';
@@ -93,8 +94,12 @@ server.tool(
   }
 );
 
-if (isWriteEnabled(loadWriteEnableConfig(serverConfigPath))) {
-  registerHttpsInspectionWriteTools(server, serverModule);
+const serverConfig = loadWriteEnableConfig(serverConfigPath);
+
+if (isWriteEnabled(serverConfig)) {
+  registerHttpsInspectionWriteTools(server, serverModule, {
+    destroyEnabled: isDestroyEnabled(serverConfig),
+  });
 }
 
 

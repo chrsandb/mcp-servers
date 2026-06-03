@@ -35,6 +35,9 @@ Verify:
 - write-command escape hatches reject traversal-like command names
 - `raw_payload` cannot override protected target-routing fields
 - write access stays disabled unless `server-config.json` declares `ENABLE_WRITE` and startup config explicitly enables it
+- destroy access stays disabled unless `server-config.json` declares `ENABLE_DESTROY` and startup config explicitly enables it
+- delete tools stay unregistered when only write access is enabled
+- `delete-*` write-command paths are rejected unless destroy access is enabled
 
 ## Layer 4: Manual / Live Sanity Checks
 Optional final stage only.
