@@ -56,6 +56,7 @@ const PARAM_SHOW_MEMBERSHIP = z.boolean().optional().default(false)
   .describe('When true, includes the groups each object belongs to. Triggers additional server-side computation; omit if not needed.');
 const PARAM_DEREFERENCE_GROUP_MEMBERS = z.boolean().optional().default(false)
   .describe('When true, expands group members to their full object details instead of returning UIDs.');
+const PARAM_DETAILS_LEVEL = z.enum(['uid', 'standard', 'full']).optional();
 
 // --- PROMPT RESOURCES ---
 const SHOW_INSTALLED_POLICIES = `Please show me my installed policies per gateway. In order to see which policies are installed, you need to call show-gateways-and-servers with details-level set to 'full'.\nIf you already know the gateway name or uid, you can use the show-simple-gateway or show simple-cluster function with details-level set to 'full' to get the installed policy.\n`;
@@ -228,6 +229,20 @@ server.tool(
     }).optional(),
     limit: z.number().optional().default(50),
     offset: z.number().optional().default(0),
+    details_level: PARAM_DETAILS_LEVEL,
+    order: z.array(z.string()).optional(),
+    dereference_group_members: PARAM_DEREFERENCE_GROUP_MEMBERS,
+    show_membership: PARAM_SHOW_MEMBERSHIP,
+    show_hits: z.boolean().optional().default(false),
+    hits_settings: z.object({
+      from_date: z.string().optional(),
+      to_date: z.string().optional(),
+      target: z.string().optional(),
+    }).optional(),
+    show_as_ranges: z.boolean().optional(),
+    show_expiration_settings: z.boolean().optional(),
+    use_object_dictionary: z.boolean().optional()
+      .describe('When true, returns a separate object dictionary and references objects by UID rather than inlining full object details — reduces response size for large rulebases.'),
     show_raw: z.boolean().optional().default(false),
     format: z.enum(['table', 'model-friendly']).optional().default('table'),
     expand_groups: z.boolean().optional().default(false),
@@ -298,6 +313,23 @@ server.tool(
         params['filter-settings'] = filterSettings;
       }
     }
+
+    if (typeof args.details_level === 'string') params['details-level'] = args.details_level;
+    if (Array.isArray(args.order)) params.order = args.order;
+    if (typeof args.dereference_group_members === 'boolean') params['dereference-group-members'] = args.dereference_group_members;
+    if (typeof args.show_membership === 'boolean') params['show-membership'] = args.show_membership;
+    if (typeof args.show_hits === 'boolean') params['show-hits'] = args.show_hits;
+    if (args.hits_settings && typeof args.hits_settings === 'object') {
+      const hs = args.hits_settings as Record<string, any>;
+      const hitsSettings: Record<string, any> = {};
+      if (typeof hs.from_date === 'string') hitsSettings['from-date'] = hs.from_date;
+      if (typeof hs.to_date === 'string') hitsSettings['to-date'] = hs.to_date;
+      if (typeof hs.target === 'string') hitsSettings.target = hs.target;
+      if (Object.keys(hitsSettings).length > 0) params['hits-settings'] = hitsSettings;
+    }
+    if (typeof args.show_as_ranges === 'boolean') params['show-as-ranges'] = args.show_as_ranges;
+    if (typeof args.show_expiration_settings === 'boolean') params['show-expiration-settings'] = args.show_expiration_settings;
+    if (typeof args.use_object_dictionary === 'boolean') params['use-object-dictionary'] = args.use_object_dictionary;
 
     // Get domain parameter
     const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
@@ -449,7 +481,7 @@ server.tool(
     order: z.array(z.object({ ASC: z.string().optional(), DESC: z.string().optional() })).optional(),
     show_membership: z.boolean().optional().default(true)
       .describe('When true, includes the groups each object belongs to. Triggers additional server-side computation; omit if not needed.'),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -483,40 +515,64 @@ server.tool(
     layer: z.string(),
     rule_number: z.number().optional(),
     uid: z.string().optional(),
-    details_level: z.string().optional(),
+    package: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     show_as_ranges: z.boolean().optional().default(false),
     show_hits: z.boolean().optional().default(false),
+    hits_settings: z.object({
+      from_date: z.string().optional(),
+      to_date: z.string().optional(),
+      target: z.string().optional(),
+    }).optional(),
+    show_expiration_settings: z.boolean().optional(),
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
     const params: Record<string, any> = {};
-    
+
     if (typeof args.name === 'string' && args.name.trim() !== '') {
       params.name = args.name;
     }
-    
+
     if (typeof args.layer === 'string' && args.layer.trim() !== '') {
       params.layer = args.layer;
     }
-    
+
     if (typeof args.rule_number === 'number') {
-      params.rule_number = args.rule_number;
+      params['rule-number'] = args.rule_number;
     }
-    
+
     if (typeof args.uid === 'string' && args.uid.trim() !== '') {
       params.uid = args.uid;
     }
-    
+
+    if (typeof args.package === 'string' && args.package.trim() !== '') {
+      params.package = args.package;
+    }
+
     if (typeof args.details_level === 'string' && args.details_level.trim() !== '') {
-      params.details_level = args.details_level;
+      params['details-level'] = args.details_level;
     }
-    
+
     if (typeof args.show_as_ranges === 'boolean') {
-      params.show_as_ranges = args.show_as_ranges;
+      params['show-as-ranges'] = args.show_as_ranges;
     }
-    
+
     if (typeof args.show_hits === 'boolean') {
-      params.show_hits = args.show_hits;
+      params['show-hits'] = args.show_hits;
+    }
+
+    if (args.hits_settings && typeof args.hits_settings === 'object') {
+      const hs = args.hits_settings as Record<string, any>;
+      const hitsSettings: Record<string, any> = {};
+      if (typeof hs.from_date === 'string') hitsSettings['from-date'] = hs.from_date;
+      if (typeof hs.to_date === 'string') hitsSettings['to-date'] = hs.to_date;
+      if (typeof hs.target === 'string') hitsSettings.target = hs.target;
+      if (Object.keys(hitsSettings).length > 0) params['hits-settings'] = hitsSettings;
+    }
+
+    if (typeof args.show_expiration_settings === 'boolean') {
+      params['show-expiration-settings'] = args.show_expiration_settings;
     }
     
     // Get domain parameter
@@ -534,7 +590,7 @@ server.tool(
   {
     name: z.string().optional(),
     uid: z.string().optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
@@ -546,7 +602,7 @@ server.tool(
       params.uid = args.uid;
     }
     if (typeof args.details_level === 'string' && args.details_level.trim() !== '') {
-      params.details_level = args.details_level;
+      params['details-level'] = args.details_level;
     }
     
     // Get domain parameter
@@ -566,7 +622,7 @@ server.tool(
     limit: z.number().optional(),
     offset: z.number().optional(),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -577,7 +633,7 @@ server.tool(
     if (typeof args.limit === 'number') params.limit = args.limit;
     if (typeof args.offset === 'number') params.offset = args.offset;
     if (Array.isArray(args.order) && args.order.length > 0) params.order = args.order;
-    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params.details_level = args.details_level;
+    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params['details-level'] = args.details_level;
     if (typeof args.domains_to_process === 'string') { params['domains-to-process'] = [args.domains_to_process]; params['ignore-warnings'] = true; }
     
     // Get domain parameter
@@ -595,24 +651,72 @@ server.tool(
   {
     package: z.string(),
     filter: z.string().optional(),
+    filter_settings: z.object({
+      search_mode: z.enum(['general', 'packet']).optional().default('general'),
+      packet_search_settings: z.object({
+        expand_group_members: z.boolean().optional().default(false),
+        expand_group_with_exclusion_members: z.boolean().optional().default(false),
+        intersection_mode_dst: z.enum(['exact', 'containing', 'contained_in', 'any']).optional().default('any'),
+        intersection_mode_src: z.enum(['exact', 'containing', 'contained_in', 'any']).optional().default('any'),
+        match_on_any: z.boolean().optional().default(true),
+        match_on_group_with_exclusion: z.boolean().optional().default(true),
+        match_on_negate: z.boolean().optional().default(true),
+      }).optional()
+    }).optional(),
     limit: z.number().optional(),
     offset: z.number().optional(),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     dereference_group_members: PARAM_DEREFERENCE_GROUP_MEMBERS,
     show_membership: PARAM_SHOW_MEMBERSHIP,
+    show_hits: z.boolean().optional().default(false),
+    hits_settings: z.object({
+      from_date: z.string().optional(),
+      to_date: z.string().optional(),
+      target: z.string().optional(),
+    }).optional(),
+    use_object_dictionary: z.boolean().optional()
+      .describe('When true, returns a separate object dictionary and references objects by UID rather than inlining full object details — reduces response size for large rulebases.'),
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
     const params: Record<string, any> = {};
     if (typeof args.package === 'string' && args.package.trim() !== '') params.package = args.package;
     if (typeof args.filter === 'string' && args.filter.trim() !== '') params.filter = args.filter;
+    if (args.filter_settings && typeof args.filter_settings === 'object') {
+      const fs = args.filter_settings as Record<string, any>;
+      const filterSettings: Record<string, any> = {};
+      if (typeof fs.search_mode === 'string') filterSettings['search-mode'] = fs.search_mode;
+      if (fs.packet_search_settings && typeof fs.packet_search_settings === 'object') {
+        const pss = fs.packet_search_settings as Record<string, any>;
+        const packetSettings: Record<string, any> = {};
+        if (typeof pss.expand_group_members === 'boolean') packetSettings['expand-group-members'] = pss.expand_group_members;
+        if (typeof pss.expand_group_with_exclusion_members === 'boolean') packetSettings['expand-group-with-exclusion-members'] = pss.expand_group_with_exclusion_members;
+        if (typeof pss.intersection_mode_dst === 'string') packetSettings['intersection-mode-dst'] = pss.intersection_mode_dst;
+        if (typeof pss.intersection_mode_src === 'string') packetSettings['intersection-mode-src'] = pss.intersection_mode_src;
+        if (typeof pss.match_on_any === 'boolean') packetSettings['match-on-any'] = pss.match_on_any;
+        if (typeof pss.match_on_group_with_exclusion === 'boolean') packetSettings['match-on-group-with-exclusion'] = pss.match_on_group_with_exclusion;
+        if (typeof pss.match_on_negate === 'boolean') packetSettings['match-on-negate'] = pss.match_on_negate;
+        if (Object.keys(packetSettings).length > 0) filterSettings['packet-search-settings'] = packetSettings;
+      }
+      if (Object.keys(filterSettings).length > 0) params['filter-settings'] = filterSettings;
+    }
     if (typeof args.limit === 'number') params.limit = args.limit;
     if (typeof args.offset === 'number') params.offset = args.offset;
     if (Array.isArray(args.order) && args.order.length > 0) params.order = args.order;
-    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params.details_level = args.details_level;
-    if (typeof args.dereference_group_members === 'boolean') params.dereference_group_members = args.dereference_group_members;
-    if (typeof args.show_membership === 'boolean') params.show_membership = args.show_membership;
+    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params['details-level'] = args.details_level;
+    if (typeof args.dereference_group_members === 'boolean') params['dereference-group-members'] = args.dereference_group_members;
+    if (typeof args.show_membership === 'boolean') params['show-membership'] = args.show_membership;
+    if (typeof args.show_hits === 'boolean') params['show-hits'] = args.show_hits;
+    if (args.hits_settings && typeof args.hits_settings === 'object') {
+      const hs = args.hits_settings as Record<string, any>;
+      const hitsSettings: Record<string, any> = {};
+      if (typeof hs.from_date === 'string') hitsSettings['from-date'] = hs.from_date;
+      if (typeof hs.to_date === 'string') hitsSettings['to-date'] = hs.to_date;
+      if (typeof hs.target === 'string') hitsSettings.target = hs.target;
+      if (Object.keys(hitsSettings).length > 0) params['hits-settings'] = hitsSettings;
+    }
+    if (typeof args.use_object_dictionary === 'boolean') params['use-object-dictionary'] = args.use_object_dictionary;
     
     // Get domain parameter
     const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
@@ -630,7 +734,7 @@ server.tool(
     name: z.string().optional(),
     uid: z.string().optional(),
     layer: z.string().optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
@@ -638,7 +742,7 @@ server.tool(
     if (typeof args.name === 'string' && args.name.trim() !== '') params.name = args.name;
     if (typeof args.uid === 'string' && args.uid.trim() !== '') params.uid = args.uid;
     if (typeof args.layer === 'string' && args.layer.trim() !== '') params.layer = args.layer;
-    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params.details_level = args.details_level;
+    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params['details-level'] = args.details_level;
     
     // Get domain parameter
     const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
@@ -651,22 +755,20 @@ server.tool(
 
 server.tool(
   'show_nat_section',
-  'Show a NAT section by name or UID and layer (at least one is required). You must always specify the package.',
+  'Show a NAT section by name or UID (at least one is required). You must always specify the package.',
   {
     name: z.string().optional(),
     uid: z.string().optional(),
-    layer: z.string().optional(),
     package: z.string(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
     const params: Record<string, any> = {};
     if (typeof args.name === 'string' && args.name.trim() !== '') params.name = args.name;
     if (typeof args.uid === 'string' && args.uid.trim() !== '') params.uid = args.uid;
-    if (typeof args.layer === 'string' && args.layer.trim() !== '') params.layer = args.layer;
     if (typeof args.package === 'string' && args.package.trim() !== '') params.package = args.package;
-    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params.details_level = args.details_level;
+    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params['details-level'] = args.details_level;
     
     // Get domain parameter
     const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
@@ -685,14 +787,14 @@ server.tool(
   {
     name: z.string().optional(),
     uid: z.string().optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
     const params: Record<string, any> = {};
     if (typeof args.name === 'string' && args.name.trim() !== '') params.name = args.name;
     if (typeof args.uid === 'string' && args.uid.trim() !== '') params.uid = args.uid;
-    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params.details_level = args.details_level;
+    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params['details-level'] = args.details_level;
     
     // Get domain parameter
     const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
@@ -711,7 +813,7 @@ server.tool(
     limit: z.number().optional(),
     offset: z.number().optional(),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -746,14 +848,14 @@ server.tool(
   {
     name: z.string().optional(),
     uid: z.string().optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
     const params: Record<string, any> = {};
     if (typeof args.name === 'string' && args.name.trim() !== '') params.name = args.name;
     if (typeof args.uid === 'string' && args.uid.trim() !== '') params.uid = args.uid;
-    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params.details_level = args.details_level;
+    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params['details-level'] = args.details_level;
     
     // Get domain parameter
     const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
@@ -772,7 +874,7 @@ server.tool(
     limit: z.number().optional(),
     offset: z.number().optional(),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -807,14 +909,14 @@ server.tool(
   {
       uid: z.string().optional(),
       name: z.string().optional(),
-      details_level: z.string().optional(),
+      details_level: PARAM_DETAILS_LEVEL,
       domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
     const params: Record<string, any> = {};
     if (typeof args.uid === 'string' && args.uid.trim() !== '') params.uid = args.uid;
     if (typeof args.name === 'string' && args.name.trim() !== '') params.name = args.name;
-    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params.details_level = args.details_level;
+    if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params['details-level'] = args.details_level;
     
     // Get domain parameter
     const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
@@ -833,7 +935,7 @@ server.tool(
     limit: z.number().optional(),
     offset: z.number().optional(),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -865,10 +967,36 @@ server.tool(
 server.tool(
   'show_domains',
   'Retrieve all domains available in the management server.',
-  {},
+  {
+    filter: z.string().optional(),
+    limit: z.number().optional().default(50),
+    offset: z.number().optional().default(0),
+    order: z.array(z.string()).optional(),
+    details_level: PARAM_DETAILS_LEVEL,
+    domains_to_process: PARAM_DOMAINS_TO_PROCESS,
+    domain: PARAM_DOMAIN,
+  },
   async (args: Record<string, unknown>, extra: any) => {
+    const filter = typeof args.filter === 'string' ? args.filter : '';
+    const limit = typeof args.limit === 'number' ? args.limit : 50;
+    const offset = typeof args.offset === 'number' ? args.offset : 0;
+    const order = Array.isArray(args.order) ? args.order as string[] : undefined;
+    const details_level = typeof args.details_level === 'string' ? args.details_level : undefined;
+    const domains_to_process = typeof args.domains_to_process === 'string' ? args.domains_to_process : undefined;
+    const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
+
+    const params: Record<string, any> = { limit, offset };
+    if (filter) params.filter = filter;
+    if (order) params.order = order;
+    if (details_level) params['details-level'] = details_level;
+    if (domains_to_process) {
+      params['domains-to-process'] = [domains_to_process];
+      params['ignore-warnings'] = true;
+    }
+
+
     const apiManager = SessionContext.getAPIManager(serverModule, extra);
-    const resp = await apiManager.callApi('POST', 'show-domains', {});
+    const resp = await apiManager.callApi('POST', 'show-domains', params, domain);
     return { content: [{ type: 'text', text: formatWithPaginationHint(resp) }] };
   }
 );
@@ -881,7 +1009,8 @@ server.tool(
     limit: z.number().optional().default(50),
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
+    show_domains: z.boolean().optional(),
   },
   async (args: Record<string, unknown>, extra: any) => {
     const filter = typeof args.filter === 'string' ? args.filter : '';
@@ -893,6 +1022,7 @@ server.tool(
     if (filter) params.filter = filter;
     if (order) params.order = order;
     if (details_level) params['details-level'] = details_level;
+    if (typeof args.show_domains === 'boolean') params['show-domains'] = args.show_domains;
     const resp = await runApi('POST', 'show-mdss', params, extra);
     return { content: [{ type: 'text', text: formatWithPaginationHint(resp) }] };
   }
@@ -905,7 +1035,7 @@ server.tool(
     limit: z.number().optional().default(50),
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -934,7 +1064,7 @@ server.tool(
   {
     name: z.string().optional(),
     uid: z.string().optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
@@ -961,7 +1091,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1001,7 +1131,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1036,18 +1166,21 @@ server.tool(
   'Retrieve a cluster member object by or UID',
   {
     uid: z.string().optional(),
-    details_level: z.string().optional(),
+    limit_interfaces: z.number().optional()
+      .describe('Limit the number of interfaces returned per cluster member.'),
+    details_level: PARAM_DETAILS_LEVEL,
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
     const uid = typeof args.uid === 'string' ? args.uid : '';
     const details_level = typeof args.details_level === 'string' ? args.details_level : undefined;
-    
+
     // Get domain parameter
     const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
-    
+
     const params: Record<string, any> = {};
     if (uid) params.uid = uid;
+    if (typeof args.limit_interfaces === 'number') params['limit-interfaces'] = args.limit_interfaces;
     if (details_level) params['details-level'] = details_level;
     
     const apiManager = SessionContext.getAPIManager(serverModule, extra);
@@ -1065,7 +1198,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1101,13 +1234,15 @@ server.tool(
   {
     name: z.string().optional(),
     uid: z.string().optional(),
-    details_level: z.string().optional(),
+    show_statuses: z.boolean().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
     const params: Record<string, any> = {};
     if (typeof args.name === 'string' && args.name.trim() !== '') params.name = args.name;
     if (typeof args.uid === 'string' && args.uid.trim() !== '') params.uid = args.uid;
+    if (typeof args.show_statuses === 'boolean') params['show-statuses'] = args.show_statuses;
     if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params['details-level'] = args.details_level;
     
     // Get domain parameter
@@ -1128,7 +1263,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1164,14 +1299,18 @@ server.tool(
   {
     name: z.string().optional(),
     uid: z.string().optional(),
-    details_level: z.string().optional(),
+    limit_interfaces: z.number().optional()
+      .describe('Limit the number of interfaces returned per cluster member.'),
+    details_level: PARAM_DETAILS_LEVEL,
+    domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
     const params: Record<string, any> = {};
     if (typeof args.name === 'string' && args.name.trim() !== '') params.name = args.name;
     if (typeof args.uid === 'string' && args.uid.trim() !== '') params.uid = args.uid;
+    if (typeof args.limit_interfaces === 'number') params['limit-interfaces'] = args.limit_interfaces;
     if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params['details-level'] = args.details_level;
-    
+
     // Get domain parameter
     const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
     
@@ -1190,7 +1329,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1226,13 +1365,15 @@ server.tool(
   {
     name: z.string().optional(),
     uid: z.string().optional(),
-    details_level: z.string().optional(),
+    show_statuses: z.boolean().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domain: PARAM_DOMAIN,
   },
   async (args: Record<string, unknown>, extra: any) => {
     const params: Record<string, any> = {};
     if (typeof args.name === 'string' && args.name.trim() !== '') params.name = args.name;
     if (typeof args.uid === 'string' && args.uid.trim() !== '') params.uid = args.uid;
+    if (typeof args.show_statuses === 'boolean') params['show-statuses'] = args.show_statuses;
     if (typeof args.details_level === 'string' && args.details_level.trim() !== '') params['details-level'] = args.details_level;
     
     // Get domain parameter
@@ -1255,7 +1396,7 @@ server.tool(
     show_as_ranges: z.boolean().optional().default(false),
     dereference_group_members: PARAM_DEREFERENCE_GROUP_MEMBERS,
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1299,7 +1440,7 @@ server.tool(
     order: z.array(z.string()).optional(),
     dereference_group_members: PARAM_DEREFERENCE_GROUP_MEMBERS,
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1346,7 +1487,7 @@ server.tool(
     dereference_group_members: PARAM_DEREFERENCE_GROUP_MEMBERS,
     show_membership: PARAM_SHOW_MEMBERSHIP,
     async_response: z.boolean().optional().default(false),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     indirect: z.boolean().optional().default(false),
     indirect_max_depth: z.number().optional().default(5),
@@ -1401,7 +1542,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1441,7 +1582,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1478,7 +1619,7 @@ server.tool(
     order: z.array(z.string()).optional(),
     dereference_group_members: PARAM_DEREFERENCE_GROUP_MEMBERS,
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1519,7 +1660,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1558,7 +1699,7 @@ server.tool(
     limit: z.number().optional().default(50),
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1597,7 +1738,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1636,7 +1777,7 @@ server.tool(
     limit: z.number().optional().default(50),
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1674,7 +1815,7 @@ server.tool(
     limit: z.number().optional().default(50),
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1712,7 +1853,7 @@ server.tool(
     limit: z.number().optional().default(50),
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1750,7 +1891,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
   },
   async (args: Record<string, unknown>, extra: any) => {
@@ -1788,7 +1929,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1824,7 +1965,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1861,9 +2002,9 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_as_ranges: z.boolean().optional().default(false),
-    dereference_members: z.boolean().optional().default(false),
+    dereference_group_members: PARAM_DEREFERENCE_GROUP_MEMBERS,
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1874,13 +2015,13 @@ server.tool(
     const offset = typeof args.offset === 'number' ? args.offset : 0;
     const order = Array.isArray(args.order) ? args.order as string[] : undefined;
     const show_as_ranges = typeof args.show_as_ranges === 'boolean' ? args.show_as_ranges : false;
-    const dereference_members = typeof args.dereference_members === 'boolean' ? args.dereference_members : false;
+    const dereference_group_members = typeof args.dereference_group_members === 'boolean' ? args.dereference_group_members : false;
     const show_membership = typeof args.show_membership === 'boolean' ? args.show_membership : false;
     const details_level = typeof args.details_level === 'string' ? args.details_level : undefined;
     const domains_to_process = typeof args.domains_to_process === 'string' ? args.domains_to_process : undefined;
     const domain = typeof args.domain === 'string' && args.domain.trim() !== '' ? args.domain : undefined;
     const params: Record<string, any> = {
-      limit, offset, 'show-as-ranges': show_as_ranges, 'dereference-members': dereference_members, 'show-membership': show_membership
+      limit, offset, 'show-as-ranges': show_as_ranges, 'dereference-group-members': dereference_group_members, 'show-membership': show_membership
     };
     if (filter) params.filter = filter;
     if (order) params.order = order;
@@ -1902,7 +2043,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1938,7 +2079,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -1977,7 +2118,7 @@ server.tool(
     limit: z.number().optional().default(50),
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -2011,7 +2152,7 @@ server.tool(
     limit: z.number().optional().default(50),
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
@@ -2042,10 +2183,12 @@ server.tool(
   {
       uids: z.array(z.string()).optional(),
       filter: z.string().optional(),
+      ip_only: z.boolean().optional()
+        .describe('When true, returns only objects that have an IP address (hosts, networks, ranges). Excludes services, groups, etc.'),
       limit: z.number().optional().default(50),
       offset: z.number().optional().default(0),
       order: z.array(z.string()).optional(),
-      details_level: z.string().optional(),
+      details_level: PARAM_DETAILS_LEVEL,
       domains_to_process: PARAM_DOMAINS_TO_PROCESS,
       type: z.string().optional(),
   },
@@ -2061,6 +2204,7 @@ server.tool(
     const params: Record<string, any> = { limit, offset };
     if ( uids ) params.uids = uids;
     if (filter) params.filter = filter;
+    if (typeof args.ip_only === 'boolean') params['ip-only'] = args.ip_only;
     if (order) params.order = order;
     if (details_level) params['details-level'] = details_level;
     if (domains_to_process) { params['domains-to-process'] = [domains_to_process]; params['ignore-warnings'] = true; }
@@ -2082,7 +2226,7 @@ server.tool(
       const uid = args.uid as string;
       const params: Record<string, any> = {}
       params.uid = uid
-      params.details_level = 'full'
+      params['details-level'] = 'full'
       const resp = await runApi('POST', 'show-object', params, extra);
       return { content: [{ type: 'text', text: formatWithPaginationHint(resp) }] };
   }
@@ -2363,7 +2507,7 @@ server.tool(
     offset: z.number().optional().default(0),
     order: z.array(z.string()).optional(),
     show_membership: PARAM_SHOW_MEMBERSHIP,
-    details_level: z.string().optional(),
+    details_level: PARAM_DETAILS_LEVEL,
     domains_to_process: PARAM_DOMAINS_TO_PROCESS,
     show_only_local_domain: PARAM_SHOW_ONLY_LOCAL_DOMAIN,
     domain: PARAM_DOMAIN,
